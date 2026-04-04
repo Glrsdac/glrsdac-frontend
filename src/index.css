@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 33% 97%;
+    --foreground: 220 40% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 40% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 40% 13%;
+
+    --primary: 220 55% 22%;
+    --primary-foreground: 40 33% 97%;
+
+    --secondary: 40 30% 92%;
+    --secondary-foreground: 220 40% 13%;
+
+    --muted: 40 20% 94%;
+    --muted-foreground: 220 15% 46%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 55% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 20% 88%;
+    --input: 40 20% 88%;
+    --ring: 220 55% 22%;
+
+    --radius: 0.625rem;
+
+    --sidebar-background: 220 55% 22%;
+    --sidebar-foreground: 220 20% 90%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 220 55% 12%;
+    --sidebar-accent: 220 50% 28%;
+    --sidebar-accent-foreground: 220 20% 90%;
+    --sidebar-border: 220 45% 30%;
+    --sidebar-ring: 38 92% 50%;
+
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 55% 12%;
+    --info: 210 80% 52%;
+    --info-foreground: 0 0% 100%;
+    --chart-1: 220 55% 22%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 152 60% 40%;
+    --chart-4: 210 80% 52%;
+    --chart-5: 0 72% 51%;
+
+    --font-heading: 'Playfair Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+
+  .dark {
+    --background: 220 40% 8%;
+    --foreground: 40 20% 94%;
+    --card: 220 40% 12%;
+    --card-foreground: 40 20% 94%;
+    --popover: 220 40% 12%;
+    --popover-foreground: 40 20% 94%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 220 55% 12%;
+    --secondary: 220 35% 18%;
+    --secondary-foreground: 40 20% 94%;
+    --muted: 220 30% 16%;
+    --muted-foreground: 220 15% 60%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 55% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 30% 20%;
+    --input: 220 30% 20%;
+    --ring: 38 92% 50%;
+    --sidebar-background: 220 45% 10%;
+    --sidebar-foreground: 220 20% 85%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 220 55% 12%;
+    --sidebar-accent: 220 40% 16%;
+    --sidebar-accent-foreground: 220 20% 85%;
+    --sidebar-border: 220 35% 18%;
+    --sidebar-ring: 38 92% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-heading);
+  }
+}
+
+/* Scrollbar styling */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+}
+
+/* Card hover effects */
+@layer components {
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 hover:border-primary/20;
+  }
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border;
+  }
+}
+
+@keyframes auth-watermark-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-10px) scale(1.03); }
+}
+
+@keyframes auth-watermark-glow {
+  0%, 100% { opacity: 0.16; transform: scale(1); }
+  50% { opacity: 0.26; transform: scale(1.08); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.auth-watermark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.auth-watermark-glow {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, hsl(var(--primary) / 0.16) 0%, transparent 70%);
+  filter: blur(16px);
+  animation: auth-watermark-glow 7s ease-in-out infinite;
+}
+
+.auth-watermark-logo {
+  width: 290px;
+  height: 290px;
+  object-fit: contain;
+  opacity: 0.1;
+  filter: saturate(0.9) contrast(1.02);
+  mix-blend-mode: multiply;
+  animation: auth-watermark-float 8s ease-in-out infinite;
+}
