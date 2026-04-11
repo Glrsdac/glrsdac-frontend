@@ -1,6 +1,22 @@
 import { useEffect, useState } from "react";
 // Supabase client removed. Uses backend API for authentication state.
 import { supabase } from "@/integrations/supabase/client"; // This line is retained for context
+import type { Session } from "@supabase/supabase-js";
+import { jwtDecode } from "jwt-decode";
+
+/**
+ * Extracts the Supabase project ID from the URL.
+ */
+const getProjectId = (): string | null => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  if (!url) return null;
+  try {
+    const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * useAuth hook
@@ -46,6 +62,7 @@ const isSessionForProject = (session: Session | null) => {
 
 export function useAuth() {
   // Session and initialization status for UI routing.
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -76,8 +93,10 @@ export function useAuth() {
       if (!isSessionForProject(nextSession)) {
         await supabase.auth.signOut();
         setSession(null);
+        setUser(null);
       } else {
         setSession(nextSession);
+        setUser(nextSession?.user ?? null);
       }
       setLoading(false);
     };
@@ -92,6 +111,7 @@ export function useAuth() {
       if (error?.message?.toLowerCase().includes("invalid refresh token")) {
         await clearStaleLocalSession();
         setSession(null);
+        setUser(null);
         setLoading(false);
         return;
       }
@@ -107,9 +127,10 @@ export function useAuth() {
   /** Sign out the user via backend API. */
   const signOut = async () => {
     await fetch("/api/auth/logout/", { method: "POST", credentials: "include" });
+    setSession(null);
     setUser(null);
   };
 
   // Expose stable values to consuming components.
-  return { user, loading, signOut };
+  return { session, user, loading, signOut };
 }

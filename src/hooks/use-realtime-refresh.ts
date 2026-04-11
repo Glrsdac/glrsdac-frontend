@@ -110,3 +110,4 @@ export const useRealtimeRefresh = ({
       }
     };
   }, [subscriptionsFingerprint, enabled, debounceMs, pollMs]);
+};
