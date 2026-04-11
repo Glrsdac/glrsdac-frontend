@@ -11,7 +11,6 @@ import {
   TrendingUp, UserCheck, Globe, RefreshCw, Bug,
 } from "lucide-react";
 import { ChurchSwitcher } from "@/components/ChurchSwitcher";
-import { useCurrentChurch } from "@/hooks/use-current-church";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 
@@ -88,26 +87,10 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
   const location = useLocation();
   const { signOut, user } = useAuth();
   const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
-      const saved = localStorage.getItem("sidebar-collapsed");
-      return saved ? JSON.parse(saved) : false;
-    }
-    return false;
+    const saved = localStorage.getItem("sidebar-collapsed");
+    return saved ? JSON.parse(saved) : false;
   });
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setCollapsed(false);
-      }
-    };
-
-    window.addEventListener("resize", handleResize);
-    handleResize();
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isChoirMember, setIsChoirMember] = useState(false);
@@ -115,7 +98,6 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
   const [dynamicPortals, setDynamicPortals] = useState<NavItem[]>([]);
   const [memberProfiles, setMemberProfiles] = useState<ProfileItem[]>([]);
   const [showDebug, setShowDebug] = useState(false);
-  const [rolesLoaded, setRolesLoaded] = useState(false);
 
   const [profileMode, setProfileMode] = useState<ProfileMode>(() => {
     const saved = localStorage.getItem("sidebar-profile-mode");
@@ -153,48 +135,43 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
 
     let roles: string[] = [];
 
-    // Hardcoded superadmin access for super@admin.com
-    if (user?.email === "super@admin.com") {
-      roles = ["SuperAdmin"];
-    } else {
-      // Attempt 1: modern schema with relation expansion.
-      const modern = await (supabase
+    // Attempt 1: modern schema with relation expansion.
+    const modern = await (supabase
+      .from("user_roles")
+      .select("role_id, roles(name)")
+      .eq("user_id", user.id)
+      .eq("is_active", true) as any);
+    if (!modern.error && modern.data) {
+      roles = (modern.data ?? []).map((r: any) => r.roles?.name).filter(Boolean);
+    }
+
+    // Attempt 2: If relation failed or no roles, get role_ids and fetch names separately
+    if (roles.length === 0) {
+      const { data: userRoleData } = await supabase
         .from("user_roles")
-        .select("role_id, roles(name)")
+        .select("role_id")
         .eq("user_id", user.id)
-        .eq("is_active", true) as any);
-      if (!modern.error && modern.data) {
-        roles = (modern.data ?? []).map((r: any) => r.roles?.name).filter(Boolean);
+        .eq("is_active", true);
+      const roleIds = (userRoleData ?? []).map((ur: any) => ur.role_id).filter(Boolean);
+      if (roleIds.length > 0) {
+        const { data: roleRows } = await supabase
+          .from("roles")
+          .select("id, name")
+          .in("id", roleIds);
+        const roleNameMap = new Map((roleRows ?? []).map((row: any) => [row.id, row.name]));
+        roles = roleIds.map((id: string) => roleNameMap.get(id)).filter(Boolean);
       }
+    }
 
-      // Attempt 2: If relation failed or no roles, get role_ids and fetch names separately
-      if (roles.length === 0) {
-        const { data: userRoleData } = await supabase
-          .from("user_roles")
-          .select("role_id")
-          .eq("user_id", user.id)
-          .eq("is_active", true);
-        const roleIds = (userRoleData ?? []).map((ur: any) => ur.role_id).filter(Boolean);
-        if (roleIds.length > 0) {
-          const { data: roleRows } = await supabase
-            .from("roles")
-            .select("id, name")
-            .in("id", roleIds);
-          const roleNameMap = new Map((roleRows ?? []).map((row: any) => [row.id, row.name]));
-          roles = roleIds.map((id: string) => roleNameMap.get(id)).filter(Boolean);
-        }
-      }
-
-      // Attempt 3: fallback to auth metadata if role tables are inaccessible/empty.
-      if (roles.length === 0) {
-        const { data: authData } = await supabase.auth.getUser();
-        const metadata = authData?.user?.app_metadata ?? {};
-        const metaRole = String(
-          metadata.role ?? metadata.user_role ?? metadata.userType ?? ""
-        ).trim();
-        if (metaRole) {
-          roles = [metaRole];
-        }
+    // Attempt 2: fallback to auth metadata if role tables are inaccessible/empty.
+    if (roles.length === 0) {
+      const { data: authData } = await supabase.auth.getUser();
+      const metadata = authData?.user?.app_metadata ?? {};
+      const metaRole = String(
+        metadata.role ?? metadata.user_role ?? metadata.userType ?? ""
+      ).trim();
+      if (metaRole) {
+        roles = [metaRole];
       }
     }
 
@@ -206,11 +183,9 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
     setIsAdmin(
       ["system admin", "admin", "church admin", "superadmin", "super admin"].some((name) => normalized.has(name))
     );
-    setRolesLoaded(true);
   };
 
   useEffect(() => {
-    setRolesLoaded(false);
     fetchUserRoles();
   }, [user?.id]);
 
@@ -269,8 +244,6 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
     })();
   }, [user?.id, profileMode, memberProfiles]);
 
-  const { currentChurch } = useCurrentChurch();
-
   const normalizedUserRoles = useMemo(() => userRoles.map((role) => String(role || "").trim().toLowerCase()), [userRoles]);
   const hasRole = useMemo(() => (r: string) => normalizedUserRoles.includes(String(r || "").trim().toLowerCase()), [normalizedUserRoles]);
   const isManagerRole = useMemo(
@@ -297,12 +270,9 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
   };
 
   const canAccess = (item: NavItem) => {
-    // Super admins can access everything
-    if (isSuperAdmin) return true;
-
     // Only show certain tabs for superadmin
     if (["/organizations", "/global-admin", "/database-sync"].includes(item.to)) {
-      return false; // Already handled by super admin check above
+      return isSuperAdmin;
     }
     if (item.alwaysVisible) return true;
 
@@ -320,17 +290,14 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
   };
 
   useEffect(() => {
-    // Only reset profile mode if we've loaded roles and the user doesn't have manager option
-    if (rolesLoaded && profileMode === "manager" && !hasManagerOption) {
-      setProfileMode("member");
-    }
-  }, [profileMode, hasManagerOption, rolesLoaded]);
+    if (profileMode === "manager" && !hasManagerOption) setProfileMode("member");
+  }, [profileMode, hasManagerOption]);
 
   const getCategories = () => {
     const choirItem: NavItem[] = isChoirMember || isAdmin ? [{ to: "/portal/member/choir", label: "Choir", icon: Music, alwaysVisible: true }] : [];
 
     const cats = navCategories.map((cat) => {
-      if (profileMode === "member" && ["Administration", "Finance"].includes(cat.category) && !isSuperAdmin) return { ...cat, items: [] };
+      if (profileMode === "member" && ["Administration", "Finance"].includes(cat.category)) return { ...cat, items: [] };
 
       let items = cat.items;
       if (cat.category === "Portals") {
@@ -350,7 +317,7 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
       }
       return { ...cat, items: items.filter(canAccess) };
     }).filter((c) => {
-      if (c.category === "Administration" && !isSuperAdmin) return false;
+      if (c.category === "Administration" && !isAdmin) return false;
       return c.items.length > 0;
     });
 
@@ -364,11 +331,7 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
     <aside className={cn(
       "bg-sidebar text-sidebar-foreground flex flex-col transition-all duration-300 border-r border-sidebar-border",
       mobile ? "h-full w-full" : "h-screen sticky top-0",
-      mobile
-        ? "w-full"
-        : collapsed
-        ? "w-[68px] sm:w-[80px] md:w-[90px]"
-        : "w-[240px] md:w-[280px] lg:w-[320px]",
+      mobile ? "w-full" : collapsed ? "w-[68px]" : "w-64",
       className
     )}>
       {/* Logo */}
@@ -449,9 +412,6 @@ export function AppSidebar({ className, mobile = false, onNavigate }: { classNam
       {/* Church Switcher for SuperAdmin */}
       {!collapsed && isSuperAdmin && (
         <div className="px-3 py-2 border-b border-sidebar-border">
-          <div className="mb-2 text-xs text-muted-foreground">
-            {currentChurch?.name ? `Selected church: ${currentChurch.name}` : "No church selected"}
-          </div>
           <ChurchSwitcher compact={true} />
         </div>
       )}

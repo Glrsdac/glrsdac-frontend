@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentChurch } from "@/hooks/use-current-church";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const Funds = () => {
-  const { currentChurch } = useCurrentChurch();
   const [groups, setGroups] = useState<any[]>([]);
   const [funds, setFunds] = useState<any[]>([]);
   const [balances, setBalances] = useState<{ [key: number]: number }>({});
@@ -46,10 +44,7 @@ const Funds = () => {
   const fetch = async () => {
     const [g, f] = await Promise.all([
       supabase.from("fund_groups").select("*").order("id"),
-      (async () => {
-        let q = (supabase.from("funds") as any).select("*, fund_groups(name)").order("id");
-        return q;
-      })(),
+      supabase.from("funds").select("*, fund_groups(name)").order("id"),
     ]);
     setGroups(g.data ?? []);
     setFunds(f.data ?? []);
@@ -70,7 +65,7 @@ const Funds = () => {
 
   useEffect(() => {
     fetch();
-  }, [currentChurch?.id]);
+  }, []);
 
   const deriveAllocationType = (localPct: number, districtPct: number, confPct: number): "LOCAL" | "CONFERENCE" | "SPLIT" => {
     if (districtPct >= 99) return "SPLIT";

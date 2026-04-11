@@ -137,13 +137,6 @@ const GOVERNANCE_PERMISSION_KEYS = [
  * then maps role names to permission keys using the constant maps above.
  */
 const fetchPermissionKeysForUser = async (userId: string) => {
-  // Hardcoded superadmin access for super@admin.com
-  const { data: authData } = await supabase.auth.getUser();
-  if (authData?.user?.email === "super@admin.com") {
-    const allKeys = new Set(ADMIN_PERMISSIONS);
-    return { keys: allKeys, isAdmin: true, error: null };
-  }
-
   const { data: userRoleRows, error } = await supabase
     .from("user_roles")
     .select("role_id,roles(name)")
@@ -153,26 +146,12 @@ const fetchPermissionKeysForUser = async (userId: string) => {
     return { keys: new Set<string>(), isAdmin: false, error };
   }
 
-  const roles = (userRoleRows ?? []).map((r: any) => String(r.roles?.name ?? "").trim()).filter(Boolean);
-  const isAdmin = roles.some((rawRole) => {
-    const normalized = rawRole.toLowerCase();
-    return ["superadmin", "super admin", "system admin", "admin"].includes(normalized);
-  });
+  const roles = (userRoleRows ?? []).map((r: any) => r.roles?.name);
+  const isAdmin = roles.some(role => role === "superadmin");
 
   const allKeys = new Set<string>();
-  for (const rawRole of roles) {
-    const normalized = rawRole.toLowerCase();
-    let canonicalRole = rawRole;
-
-    if (normalized === "superadmin") canonicalRole = "SuperAdmin";
-    else if (normalized === "super admin") canonicalRole = "Super Admin";
-    else if (normalized === "system admin") canonicalRole = "System Admin";
-    else if (normalized === "admin") canonicalRole = "ADMIN";
-    else if (normalized === "treasurer") canonicalRole = "TREASURER";
-    else if (normalized === "clerk") canonicalRole = "CLERK";
-    else if (normalized === "viewer") canonicalRole = "VIEWER";
-
-    const perms = ROLE_PERMISSIONS[canonicalRole] ?? ROLE_PERMISSIONS[rawRole] ?? [];
+  for (const role of roles) {
+    const perms = ROLE_PERMISSIONS[role] ?? [];
     for (const perm of perms) {
       allKeys.add(perm);
     }
@@ -342,17 +321,6 @@ const getSidebarProfileMode = (): SidebarProfileMode => {
 
 function ManagerViewModeGuard({ children }: { children: JSX.Element }) {
   const [profileMode, setProfileMode] = useState<SidebarProfileMode>(() => getSidebarProfileMode());
-  const { user } = useAuth();
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
-  // Check if user is super admin
-  useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
-      const { isAdmin } = await fetchPermissionKeysForUser(user.id);
-      setIsSuperAdmin(isAdmin);
-    })();
-  }, [user?.id]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -376,7 +344,7 @@ function ManagerViewModeGuard({ children }: { children: JSX.Element }) {
     };
   }, []);
 
-  if (profileMode !== "manager" && !isSuperAdmin) {
+  if (profileMode !== "manager") {
     return <Navigate to="/portal/member/dashboard" replace />;
   }
 

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Shield, Mail, MailPlus, KeyRound, Building2, Users as UsersIcon, Filter } from "lucide-react";
+import { Plus, Trash2, Shield, Mail, MailPlus, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
@@ -28,79 +27,39 @@ type User = {
     scope_id?: string | null;
     role?: { id: string; name: string; category?: string | null } | null;
   }>;
-  organization?: { id: string; name: string; type: string } | null;
-  church?: { id: string; name: string } | null;
-};
-
-type Organization = {
-  id: string;
-  name: string;
-  type: string;
-  code?: string;
-};
-
-type Church = {
-  id: string;
-  name: string;
-  organization_id?: string;
 };
 
 const ASSIGNABLE_ROLES = ["ADMIN", "TREASURER", "CLERK", "VIEWER"] as const;
 
-const callAdminFunction = async (fnName: string, body: object = {}, token?: string) => {
-  if (!token) {
-    console.error(`[admin] Missing auth token for ${fnName}`);
-    return { ok: false, data: { error: "Missing auth token" }, status: 401 };
+const callAdminFunction = async (fnName: string, body: object, token?: string) => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  console.log(`[admin] Calling ${fnName} with token (len=${token.length}, preview=${token.substring(0, 20)}...)`);
+  const response = await fetch(`/api/functions/${fnName}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
 
-  try {
-    // Use direct fetch instead of supabase.functions.invoke() to avoid automatic
-    // Authorization header that causes "invalid session" 401 errors.
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const functionUrl = `${supabaseUrl}/functions/v1/${fnName}`;
-    
-    const response = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-token': token,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error(`[admin] Function ${fnName} returned ${response.status}:`, data);
-      return { ok: false, data, status: response.status };
-    }
-
-    console.log(`[admin] Function ${fnName} succeeded`);
-    return { ok: true, data, status: response.status };
-  } catch (error) {
-    console.error(`[admin] Function ${fnName} error:`, error);
-    return { ok: false, data: { error: error instanceof Error ? error.message : String(error) }, status: 500 };
-  }
+  const data = await response.json();
+  return { ok: response.ok, data, status: response.status };
 };
 
 const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [churches, setChurches] = useState<Church[]>([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "", full_name: "", role: "VIEWER", organization_id: "", church_id: "" });
+  const [form, setForm] = useState({ email: "", password: "", full_name: "", role: "VIEWER" });
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [passwordTargetUser, setPasswordTargetUser] = useState<User | null>(null);
   const [passwordUpdateForm, setPasswordUpdateForm] = useState({ new_password: "", confirm_password: "" });
   const [passwordUpdateErrors, setPasswordUpdateErrors] = useState<string[]>([]);
-  const [filterOrg, setFilterOrg] = useState<string>("");
-  const [filterChurch, setFilterChurch] = useState<string>("");
   const { toast } = useToast();
   const { user: currentUser, session, signOut } = useAuth();
   const lastUserIdRef = useRef<string | null>(null);
@@ -108,20 +67,12 @@ const Users = () => {
   const refreshRetryRef = useRef(false);
 
   const getToken = async () => {
-    if (session?.access_token) {
-      console.log("[admin] Token from session context");
-      return session.access_token;
-    }
+    if (session?.access_token) return session.access_token;
     const { data: { session: fallbackSession } } = await supabase.auth.getSession();
-    if (fallbackSession?.access_token) {
-      console.log("[admin] Token from fallback getSession");
-      return fallbackSession.access_token;
-    }
-    console.warn("[admin] No token available from session or fallback");
-    return "";
+    return fallbackSession?.access_token ?? "";
   };
 
-  // Check if current user is admin/superadmin
+  // Check if current user is admin
   useEffect(() => {
     if (!currentUser) return;
     supabase
@@ -132,35 +83,11 @@ const Users = () => {
         const roles = (data ?? []).map((r: any) => r.roles?.name);
         setIsAdmin(
           roles.some((name: string) =>
-            ["SuperAdmin", "Super Admin", "System Admin", "ADMIN", "Church Admin"].includes(name)
-          )
-        );
-        setIsSuperAdmin(
-          roles.some((name: string) =>
-            ["SuperAdmin", "Super Admin", "System Admin"].includes(name)
+            ["SuperAdmin", "Super Admin", "System Admin", "ADMIN"].includes(name)
           )
         );
       });
   }, [currentUser]);
-
-  // Fetch organizations and churches for superadmin
-  const fetchOrganizationsAndChurches = async () => {
-    if (!isSuperAdmin) return;
-
-    const [orgResult, churchResult] = await Promise.all([
-      supabase.from("organizations").select("id, name, type, code").eq("is_active", true),
-      supabase.from("churches").select("id, name, organization_id")
-    ]);
-
-    if (orgResult.data) setOrganizations(orgResult.data);
-    if (churchResult.data) setChurches(churchResult.data);
-  };
-
-  useEffect(() => {
-    if (isSuperAdmin) {
-      fetchOrganizationsAndChurches();
-    }
-  }, [isSuperAdmin]);
 
   const fetchUsers = async () => {
     try {
@@ -169,10 +96,6 @@ const Users = () => {
       const { ok, data, status } = await callAdminFunction("admin-list-users", {}, token);
       if (!ok) {
         if (status === 401) {
-          const msg = data?.details || data?.message || data?.error || "Unauthorized";
-          console.warn(`[admin] 401 from admin-list-users: ${msg}`);
-          toast({ title: "Session issue", description: "Please sign out and sign in again.", variant: "destructive" });
-
           if (!refreshRetryRef.current) {
             refreshRetryRef.current = true;
             const { data: { session: refreshed } } = await supabase.auth.refreshSession();
@@ -181,77 +104,16 @@ const Users = () => {
               if (retry.ok) { setUsers(retry.data.users ?? []); return; }
             }
           }
-
           if (!authErrorShownRef.current) {
             authErrorShownRef.current = true;
-            throw new Error(msg || "Session expired.");
+            throw new Error(data?.details || data?.message || data?.error || "Session expired.");
           }
           await signOut();
           return;
         }
-
         throw new Error(data?.details || data?.message || data?.error || "Failed to fetch users");
       }
-
-      let usersData = data.users ?? [];
-
-      // For superadmin, enrich with organization and church info
-      if (isSuperAdmin && usersData.length > 0) {
-        const userIds = usersData.map((u: User) => u.id);
-
-        // Get user roles with scope information
-        const { data: userRolesData } = await supabase
-          .from("user_roles")
-          .select(`
-            user_id,
-            scope_type,
-            scope_id,
-            roles(name)
-          `)
-          .in("user_id", userIds)
-          .eq("is_active", true);
-
-        // Get organizations and churches for scope resolution
-        const [orgData, churchData] = await Promise.all([
-          supabase.from("organizations").select("id, name, type"),
-          supabase.from("churches").select("id, name, organization_id")
-        ]);
-
-        const orgMap = new Map(orgData.data?.map(o => [o.id, o]) || []);
-        const churchMap = new Map(churchData.data?.map(c => [c.id, c]) || []);
-
-        usersData = usersData.map((user: User) => {
-          const userRoles = userRolesData?.filter(ur => ur.user_id === user.id) || [];
-
-          // Find primary organization and church from roles
-          let organization = null;
-          let church = null;
-
-          for (const role of userRoles) {
-            if (role.scope_type === "global") {
-              // Global roles don't have specific org/church
-              continue;
-            } else if (role.scope_type === "church" && role.scope_id) {
-              const churchInfo = churchMap.get(role.scope_id);
-              if (churchInfo) {
-                church = { id: churchInfo.id, name: churchInfo.name };
-                const orgInfo = orgMap.get(churchInfo.organization_id);
-                if (orgInfo) {
-                  organization = { id: orgInfo.id, name: orgInfo.name, type: orgInfo.type };
-                }
-              }
-            }
-          }
-
-          return {
-            ...user,
-            organization,
-            church
-          };
-        });
-      }
-
-      setUsers(usersData);
+      setUsers(data.users ?? []);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       toast({ title: "Error", description: message, variant: "destructive" });
@@ -281,19 +143,6 @@ const Users = () => {
     return "VIEWER";
   };
 
-  const filteredUsers = useMemo(() => {
-    return users.filter(user => {
-      if (filterOrg && user.organization?.id !== filterOrg) return false;
-      if (filterChurch && user.church?.id !== filterChurch) return false;
-      return true;
-    });
-  }, [users, filterOrg, filterChurch]);
-
-  const availableChurches = useMemo(() => {
-    if (!filterOrg) return churches;
-    return churches.filter(church => church.organization_id === filterOrg);
-  }, [churches, filterOrg]);
-
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
@@ -310,26 +159,13 @@ const Users = () => {
 
     try {
       const token = await getToken();
-
-      // Determine scope based on superadmin selections
-      let scope_type = "global";
-      let scope_id = null;
-
-      if (isSuperAdmin && form.church_id) {
-        scope_type = "church";
-        scope_id = form.church_id;
-      } else if (isSuperAdmin && form.organization_id) {
-        scope_type = "organization";
-        scope_id = form.organization_id;
-      }
-
       const { ok, data } = await callAdminFunction("admin-create-user", {
         email: form.email, password: form.password, full_name: form.full_name,
-        role: form.role, scope_type, scope_id,
+        role: form.role, scope_type: "global", scope_id: null,
       }, token);
       if (!ok) throw new Error(data.error || "Failed to create user");
       toast({ title: "User added", description: `${form.email} added as ${form.role}` });
-      setForm({ email: "", password: "", full_name: "", role: "VIEWER", organization_id: "", church_id: "" });
+      setForm({ email: "", password: "", full_name: "", role: "VIEWER" });
       setPasswordErrors([]);
       setOpen(false);
       fetchUsers();
@@ -447,72 +283,15 @@ const Users = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={isSuperAdmin ? "Global User Management" : "User Management"}
-        description={isSuperAdmin ? "Manage users across all organizations and churches" : "Manage user accounts and role assignments"}
-        icon={<Shield className="w-5 h-5" />}
-      />
+      <PageHeader title="User Management" description="Manage user accounts and role assignments" icon={<Shield className="w-5 h-5" />} />
 
       {isAdmin && (
         <div className="mb-6 space-y-3">
           <div className="bg-muted border rounded-lg p-4">
             <p className="text-sm text-muted-foreground">
               <strong>Workflow:</strong> New users are auto-assigned the VIEWER role. Use this page to manage accounts and change roles.
-              {isSuperAdmin && " As a superadmin, you can manage users across all organizations."}
             </p>
           </div>
-
-          {/* Filters for SuperAdmin */}
-          {isSuperAdmin && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Filter className="w-4 h-4" />
-                  Filter Users
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Organization</Label>
-                    <Select value={filterOrg} onValueChange={(value) => {
-                      setFilterOrg(value);
-                      setFilterChurch(""); // Reset church filter when org changes
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Organizations" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All Organizations</SelectItem>
-                        {organizations.map(org => (
-                          <SelectItem key={org.id} value={org.id}>
-                            {org.name} ({org.type})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Church</Label>
-                    <Select value={filterChurch} onValueChange={setFilterChurch} disabled={!filterOrg}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Churches" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All Churches</SelectItem>
-                        {availableChurches.map(church => (
-                          <SelectItem key={church.id} value={church.id}>
-                            {church.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2"><Plus size={16} />Add User</Button>
@@ -539,35 +318,6 @@ const Users = () => {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Organization/Church assignment for SuperAdmin */}
-                {isSuperAdmin && (
-                  <>
-                    <div><Label htmlFor="organization">Organization</Label>
-                      <Select value={form.organization_id} onValueChange={(v) => setForm(s => ({ ...s, organization_id: v, church_id: "" }))}>
-                        <SelectTrigger><SelectValue placeholder="Select organization" /></SelectTrigger>
-                        <SelectContent>
-                          {organizations.map((org) => (<SelectItem key={org.id} value={org.id}>{org.name} ({org.type})</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div><Label htmlFor="church">Church</Label>
-                      <Select
-                        value={form.church_id}
-                        onValueChange={(v) => setForm(s => ({ ...s, church_id: v }))}
-                        disabled={!form.organization_id}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Select church" /></SelectTrigger>
-                        <SelectContent>
-                          {churches.filter(c => c.organization_id === form.organization_id).map((church) => (
-                            <SelectItem key={church.id} value={church.id}>{church.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
-                )}
-
                 <Button type="submit" className="w-full">Create User</Button>
               </form>
             </DialogContent>
@@ -577,15 +327,7 @@ const Users = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <Shield size={20} />
-            {isSuperAdmin ? "Global User Directory" : "Application Users"}
-            {filteredUsers.length !== users.length && (
-              <Badge variant="secondary" className="ml-2">
-                {filteredUsers.length} of {users.length}
-              </Badge>
-            )}
-          </CardTitle>
+          <CardTitle className="font-heading text-lg flex items-center gap-2"><Shield size={20} />Application Users</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -593,8 +335,6 @@ const Users = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
-                  {isSuperAdmin && <TableHead>Organization</TableHead>}
-                  {isSuperAdmin && <TableHead>Church</TableHead>}
                   <TableHead>Status</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Added</TableHead>
@@ -602,7 +342,7 @@ const Users = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map(u => (
+                {users.map(u => (
                   <TableRow key={u.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -610,33 +350,6 @@ const Users = () => {
                         <span className="font-medium text-sm">{u.email}</span>
                       </div>
                     </TableCell>
-                    {isSuperAdmin && (
-                      <TableCell>
-                        {u.organization ? (
-                          <div className="flex items-center gap-2">
-                            <Building2 size={14} className="text-muted-foreground" />
-                            <span className="text-sm">{u.organization.name}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {u.organization.type}
-                            </Badge>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Global</span>
-                        )}
-                      </TableCell>
-                    )}
-                    {isSuperAdmin && (
-                      <TableCell>
-                        {u.church ? (
-                          <div className="flex items-center gap-2">
-                            <UsersIcon size={14} className="text-muted-foreground" />
-                            <span className="text-sm">{u.church.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
-                      </TableCell>
-                    )}
                     <TableCell>
                       {u.confirmed_at
                         ? <Badge variant="default" className="text-xs">Confirmed</Badge>
@@ -686,10 +399,8 @@ const Users = () => {
                     )}
                   </TableRow>
                 ))}
-                {filteredUsers.length === 0 && (
-                  <TableRow><TableCell colSpan={isSuperAdmin ? 7 : 5} className="text-center text-muted-foreground py-8">
-                    {users.length === 0 ? "No users found" : "No users match the current filters"}
-                  </TableCell></TableRow>
+                {users.length === 0 && (
+                  <TableRow><TableCell colSpan={isAdmin ? 5 : 4} className="text-center text-muted-foreground py-8">No users found</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

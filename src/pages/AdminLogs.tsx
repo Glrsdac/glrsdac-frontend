@@ -7,11 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { callEdgeFunction } from "@/lib/call-edge-function";
 import { Activity, Download, FileText, Search } from "lucide-react";
 
 type LogItem = {
-  id: string;
+  id: number;
   timestamp: string;
   entityType: string;
   entityId: string;
@@ -66,34 +65,6 @@ const jsonSnippet = (value: Record<string, unknown> | null) => {
 
 const payloadText = (log: LogItem) =>
   `${JSON.stringify(log.beforeData ?? {})} ${JSON.stringify(log.afterData ?? {})}`.toLowerCase();
-
-const normalizeAuditRow = (row: Record<string, any>, index: number): LogItem => {
-  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : null;
-  const actorValue = row.actor_user_id ?? row.user_id ?? row.actor ?? metadata?.actor ?? null;
-  const actorText = actorValue == null ? "System" : String(actorValue);
-
-  return {
-    id: String(row.id ?? `audit:${index}`),
-    timestamp: String(row.created_at ?? row.createdAt ?? ""),
-    entityType: String(row.entity_type ?? row.entity ?? row.table_name ?? "audit_log"),
-    entityId: String(row.entity_id ?? row.table_name ?? row.user_id ?? ""),
-    action: String(row.action ?? "UNKNOWN"),
-    actor: toActorText(actorText),
-    isFinancial: Boolean(row.is_financial ?? false),
-    beforeData: (row.before_data as Record<string, unknown>) ?? null,
-    afterData: (row.after_data as Record<string, unknown>) ?? metadata,
-  };
-};
-
-const fetchAuditLogs = async (token: string) => {
-  const data = await callEdgeFunction("admin-audit-logs", {}, token);
-
-  if (data?.error) {
-    throw new Error(String(data.error));
-  }
-
-  return ((data?.logs ?? []) as any[]).map((row, index) => normalizeAuditRow(row, index));
-};
 
 const detectSource = (log: LogItem): DiagnosticsSource => {
   const fingerprint = `${log.entityType} ${log.action} ${log.entityId} ${payloadText(log)}`.toLowerCase();
@@ -267,22 +238,13 @@ const AdminLogs = () => {
 
       const { data: roleRows, error: roleError } = await supabase
         .from("user_roles")
-        .select("role_id")
+        .select("role_id,roles(name)")
         .eq("user_id", currentUserId);
 
       if (roleError) throw roleError;
 
-      const roleIds = (roleRows ?? []).map((r: any) => r.role_id).filter(Boolean);
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("roles")
-        .select("name")
-        .in("id", roleIds);
-
-      if (rolesError) throw rolesError;
-
-      const roles = (rolesData ?? []).map((r: any) => (r.name || "").toLowerCase());
-      const adminNames = ["superadmin", "super admin", "system admin", "admin", "church admin"];
-      const isAuditAdmin = roles.some((role: string) => adminNames.includes(role));
+      const roles = (roleRows ?? []).map((r: any) => r.roles?.name);
+      const isAuditAdmin = roles.some((role) => role === "SuperAdmin");
 
       if (!isAuditAdmin) {
         setAuthorized(false);
@@ -292,14 +254,26 @@ const AdminLogs = () => {
 
       setAuthorized(true);
 
-      const token = sessionData.session?.access_token;
-      if (!token) {
-        setAuthorized(false);
-        setLogs([]);
-        return;
-      }
+      const { data, error } = await supabase
+        .from("audit_logs" as any)
+        .select("id, created_at, action, entity_type, entity_id, actor_user_id, before_data, after_data, is_financial")
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-      const mapped = await fetchAuditLogs(token);
+      if (error) throw error;
+
+      const mapped: LogItem[] = (data ?? []).map((row: any) => ({
+        id: Number(row.id),
+        timestamp: String(row.created_at ?? ""),
+        entityType: String(row.entity_type ?? "unknown"),
+        entityId: String(row.entity_id ?? ""),
+        action: String(row.action ?? "UNKNOWN"),
+        actor: toActorText(row.actor_user_id),
+        isFinancial: Boolean(row.is_financial),
+        beforeData: row.before_data ?? null,
+        afterData: row.after_data ?? null,
+      }));
+
       setLogs(mapped);
     } catch (error: any) {
       toast({

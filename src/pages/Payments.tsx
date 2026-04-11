@@ -124,7 +124,7 @@ const Payments = () => {
         {
           payment_date: paymentForm.payment_date,
           amount: parseFloat(paymentForm.amount),
-          payment_method: paymentForm.payment_method as any,
+          payment_method: paymentForm.payment_method,
           category: paymentForm.category,
           vendor: paymentForm.vendor,
           reference_number: paymentForm.reference_number || null,
@@ -177,7 +177,7 @@ const Payments = () => {
           amount: parseFloat(returnForm.amount),
           recipient: returnForm.recipient,
           fund_name: returnForm.fund_name,
-          payment_method: returnForm.payment_method as any,
+          payment_method: returnForm.payment_method,
           reference_number: returnForm.reference_number || null,
           description: returnForm.description || null,
         },

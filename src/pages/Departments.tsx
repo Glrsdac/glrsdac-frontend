@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentChurch } from "@/hooks/use-current-church";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +42,6 @@ const toDatabaseDepartmentId = (value: unknown): number | null => {
 };
 
 const Departments = () => {
-  const { currentChurch } = useCurrentChurch();
   const [departments, setDepartments] = useState<any[]>([]);
   const [departmentMembers, setDepartmentMembers] = useState<Record<string, any[]>>({});
   const [allMembers, setAllMembers] = useState<any[]>([]);
@@ -60,11 +58,7 @@ const Departments = () => {
   const { toast } = useToast();
 
   const fetch = async () => {
-    let deptQuery = supabase.from("departments").select("*").order("id");
-    if (currentChurch?.id) {
-      deptQuery = deptQuery.eq("church_id", currentChurch.id);
-    }
-    const { data } = await deptQuery;
+    const { data } = await supabase.from("departments").select("*").order("id");
     const visibleDepartments = (data ?? []).filter(isDisplayDepartment);
     setDepartments(visibleDepartments);
     
@@ -98,24 +92,18 @@ const Departments = () => {
   };
 
   const fetchAllMembers = async () => {
-    let memberQuery = supabase
+    const { data } = await supabase
       .from("members")
       .select("id, first_name, last_name, member_no, phone, status")
       .eq("status", "ACTIVE")
       .order("first_name");
-
-    if (currentChurch?.id) {
-      memberQuery = memberQuery.eq("church_id", currentChurch.id);
-    }
-
-    const { data } = await memberQuery;
     setAllMembers(data ?? []);
   };
 
   useEffect(() => {
     fetch();
     fetchAllMembers();
-  }, [currentChurch?.id]);
+  }, []);
 
   const resetForm = () => {
     setForm({ name: "", description: "", is_active: true });

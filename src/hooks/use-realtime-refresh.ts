@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase client removed. Backend polling only.
 
 /**
  * useRealtimeRefresh
  *
  * Purpose:
- * - Trigger a "refresh" callback when records in specific Supabase tables change.
+ * - Trigger a "refresh" callback when records in specific backend tables change.
  *
  * Strategy:
  * - Default mode is `polling-only` to keep behavior predictable.
@@ -37,7 +37,7 @@ export const useRealtimeRefresh = ({
   debounceMs = 400,
   pollMs = 8000,
   mode = "polling-only",
-  websocketTimeoutMs = 6000,
+  websocketTimeoutMs = 6000, // Unused, left for future WebSocket support
 }: UseRealtimeRefreshOptions) => {
   // Keep latest callback reference without re-subscribing everything.
   const refreshRef = useRef(onRefresh);
@@ -82,15 +82,10 @@ export const useRealtimeRefresh = ({
     };
 
     let pollInterval: number | null = null;
-    let websocketTimeout: number | null = null;
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let hasSubscribed = false;
-
     // Polling loop:
     // - Only refresh when the tab is visible (saves resources).
     const startPolling = () => {
       if (pollInterval !== null) return;
-
       pollInterval = window.setInterval(() => {
         if (document.visibilityState !== "visible") return;
         scheduleRefresh();
@@ -104,87 +99,15 @@ export const useRealtimeRefresh = ({
       pollInterval = null;
     };
 
-    // Fallback: start polling and remove any active websocket channel.
-    const fallbackToPolling = () => {
-      startPolling();
-      if (channel) {
-        void supabase.removeChannel(channel);
-        channel = null;
-      }
-    };
+    // Only polling mode is supported now.
+    startPolling();
 
-    if (mode === "polling-only") {
-      startPolling();
-    } else {
-      // Websocket mode: subscribe to postgres_changes and refresh on matching events.
-      channel = supabase.channel(channelName);
-
-      normalizedSubscriptions.forEach((entry) => {
-        channel?.on(
-          "postgres_changes",
-          {
-            event: entry.event,
-            schema: entry.schema,
-            table: entry.table,
-          },
-          scheduleRefresh
-        );
-      });
-
-      websocketTimeout = window.setTimeout(() => {
-        if (!hasSubscribed) {
-          fallbackToPolling();
-        }
-      }, Math.max(1000, websocketTimeoutMs));
-
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          hasSubscribed = true;
-          if (websocketTimeout !== null) {
-            window.clearTimeout(websocketTimeout);
-            websocketTimeout = null;
-          }
-          stopPolling();
-          return;
-        }
-
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          fallbackToPolling();
-          return;
-        }
-
-        if (status === "CLOSED" && !hasSubscribed) {
-          fallbackToPolling();
-        }
-      });
-    }
-
+    // Cleanup on unmount
     return () => {
       stopPolling();
-
-      if (websocketTimeout !== null) {
-        window.clearTimeout(websocketTimeout);
-        websocketTimeout = null;
-      }
-
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-
-      if (channel) {
-        // Remove websocket channel to avoid duplicate subscriptions after unmount.
-        void supabase.removeChannel(channel);
-        channel = null;
       }
     };
-  }, [
-    enabled,
-    channelName,
-    subscriptionsFingerprint,
-    debounceMs,
-    pollMs,
-    mode,
-    websocketTimeoutMs,
-  ]);
+  }, [subscriptionsFingerprint, enabled, debounceMs, pollMs]);
 };

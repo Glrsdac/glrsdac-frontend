@@ -325,7 +325,7 @@ export default function ClerkPortal({ initialTab = "dashboard" }: { initialTab?:
           .limit(300),
         supabase
           .from("announcements" as any)
-          .select("id, title, message, published_at")
+          .select("id, title, description, url, is_published, published_at, created_at")
           .order("published_at", { ascending: false })
           .limit(200),
         supabase
@@ -340,7 +340,7 @@ export default function ClerkPortal({ initialTab = "dashboard" }: { initialTab?:
           .limit(200),
         supabase
           .from("departments" as any)
-          .select("id, name")
+          .select("id, name, type")
           .eq("is_active", true)
           .order("name", { ascending: true }),
       ]);

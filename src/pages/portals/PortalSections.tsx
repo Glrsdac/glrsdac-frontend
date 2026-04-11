@@ -72,7 +72,3 @@ export function MemberPortalSection() {
 export function GovernancePortalSection() {
   return <PortalLayout title="Governance Portal" description="Church board governance, policy oversight, and audit workflows." hideHeader />;
 }
-
-export default function PortalSections() {
-  return <GovernancePortalSection />;
-}

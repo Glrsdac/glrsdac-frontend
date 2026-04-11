@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { callBackendFunction } from "@/lib/call-backend-function";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,7 +90,7 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      if (!import.meta.env.VITE_SUPABASE_URL || !anonKey) {
+      if (!import.meta.env.VITE_SUPABASE_URL) {
         toast({
           title: "Configuration Error",
           description: "Signup service is not configured. Please contact your administrator.",
@@ -99,27 +100,13 @@ const Signup = () => {
         return;
       }
 
-      // Call complete-signup edge function
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/complete-signup`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: anonKey,
-            Authorization: `Bearer ${anonKey}`,
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            invite_token: inviteToken,
-          }),
-        }
-      );
+      const data = await callBackendFunction('complete-signup', {
+        email,
+        password,
+        invite_token: inviteToken,
+      });
 
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (!data) {
         toast({
           title: "Activation Failed",
           description: data.error || "Unable to activate your account. The link may have expired.",

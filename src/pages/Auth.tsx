@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase client removed. All auth operations now use backend API.
+import { callBackendFunction } from "@/lib/call-backend-function";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,9 +38,6 @@ const Auth = () => {
   const location = useLocation();
   const { toast } = useToast();
 
-  // Env: Supabase anonymous key (sometimes present under older env var names)
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
   /**
    * Login handler:
    * - Prevent default form submit
@@ -49,18 +47,28 @@ const Auth = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) {
-      toast({ title: "Login failed", description: error.message, variant: "destructive" });
-    } else {
-      // Attempt to restore navigation intent from stored state.
-      const state = location.state as { from?: string } | null;
-      const fromState = String(state?.from ?? "").trim();
-      const savedRoute = String(localStorage.getItem("last-visited-app-route") ?? "").trim();
-      const preferredRoute = [fromState, savedRoute].find(
-        (route) => route.startsWith("/") && !route.startsWith("/auth") && !route.startsWith("/signup")
-      );
-      navigate(preferredRoute || "/", { replace: true });
+    try {
+      const res = await fetch("/api/auth/login/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: email.trim(), password })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast({ title: "Login failed", description: err.detail || "Invalid credentials", variant: "destructive" });
+      } else {
+        // Attempt to restore navigation intent from stored state.
+        const state = location.state as { from?: string } | null;
+        const fromState = String(state?.from ?? "").trim();
+        const savedRoute = String(localStorage.getItem("last-visited-app-route") ?? "").trim();
+        const preferredRoute = [fromState, savedRoute].find(
+          (route) => route.startsWith("/") && !route.startsWith("/auth") && !route.startsWith("/signup")
+        );
+        navigate(preferredRoute || "/", { replace: true });
+      }
+    } catch (error: any) {
+      toast({ title: "Login failed", description: error.message || "Unknown error", variant: "destructive" });
     }
     setLoading(false);
   };
@@ -75,23 +83,14 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-signup`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-          body: JSON.stringify({ email: signupEmail.trim(), full_name: signupFullName.trim() }),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        toast({ title: "Signup failed", description: data.error || "Unable to process signup request", variant: "destructive" });
-      } else {
-        toast({ title: "Check your email", description: data.message || "A signup invitation has been sent." });
-        setSignupEmail(""); setSignupFullName("");
-      }
-    } catch {
-      toast({ title: "Signup failed", description: "Please contact the Admin or Church Leaders.", variant: "destructive" });
+      const data = await callBackendFunction('request-signup', {
+        email: signupEmail.trim(),
+        full_name: signupFullName.trim(),
+      });
+      toast({ title: "Check your email", description: data.message || "A signup invitation has been sent." });
+      setSignupEmail(""); setSignupFullName("");
+    } catch (error: any) {
+      toast({ title: "Signup failed", description: error.message || "Please contact the Admin or Church Leaders.", variant: "destructive" });
     }
     setLoading(false);
   };
@@ -105,10 +104,13 @@ const Auth = () => {
     e.preventDefault();
     setForgotLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: `${window.location.origin}/auth?type=reset`,
+      const res = await fetch("/api/auth/forgot-password/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: forgotEmail, redirectTo: `${window.location.origin}/auth?type=reset` })
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error("Failed to send reset email");
       toast({ title: "Success", description: "Password reset instructions have been sent to your email." });
       setForgotEmail(""); setShowForgotPassword(false);
     } catch (error: any) {

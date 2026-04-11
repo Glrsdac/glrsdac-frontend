@@ -41,7 +41,7 @@ interface DayBornSummary {
 }
 
 interface Member {
-  id: string;
+  id: number;
   first_name: string;
   last_name: string;
   dob?: string;
@@ -177,14 +177,14 @@ const DaybornContributions = () => {
 
       const { error } = await supabase.from("contributions").insert([
         {
-          member_id: newRecord.member_id,
+          member_id: parseInt(newRecord.member_id),
           amount: parseFloat(newRecord.amount),
           fund_id: parseInt(newRecord.fund_id),
           service_date: format(today, "yyyy-MM-dd"),
           sabbath_account_id: sessionId || 1,
           payment_method: "CASH",
         },
-      ] as any);
+      ]);
 
       if (error) throw error;
 
@@ -368,7 +368,7 @@ const DaybornContributions = () => {
                                 <Label>Member</Label>
                                 <Input
                                   disabled
-                                  value={`${newRecord.member_id ? weekdayMembers.find(m => String(m.id) === newRecord.member_id)?.first_name || '' : ''} ${newRecord.member_id ? weekdayMembers.find(m => String(m.id) === newRecord.member_id)?.last_name || '' : ''}`}
+                                  value={`${newRecord.member_id ? weekdayMembers.find(m => m.id === parseInt(newRecord.member_id))?.first_name || '' : ''} ${newRecord.member_id ? weekdayMembers.find(m => m.id === parseInt(newRecord.member_id))?.last_name || '' : ''}`}
                                 />
                               </div>
                               <div>

@@ -692,7 +692,7 @@ export default function MemberCalendar() {
                             <Badge variant="secondary">{formatProgramLevel(event.program_level)}</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">{event.description ?? "No description"}</p>
-                          <Button variant="ghost" size="sm" onClick={() => openProgramDetails(event)}>
+                          <Button variant="ghost" size="xs" onClick={() => openProgramDetails(event)}>
                             View details
                           </Button>
                         </div>

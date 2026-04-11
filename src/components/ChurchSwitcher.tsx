@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { useCurrentChurch } from "@/hooks/use-current-church";
 import {
   Select,
   SelectContent,
@@ -38,34 +37,24 @@ interface ChurchSwitcherProps {
 export const ChurchSwitcher = ({ currentChurchId, onChurchChange, compact = false }: ChurchSwitcherProps) => {
   const [churches, setChurches] = useState<Church[]>([]);
   const [userContexts, setUserContexts] = useState<UserChurchContext[]>([]);
-  const { currentChurch } = useCurrentChurch();
   const [selectedChurchId, setSelectedChurchId] = useState<string>(currentChurchId || "");
   const [loading, setLoading] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
   const fetchChurches = async () => {
     const { data, error } = await supabase
       .from("churches")
-      .select("id, name, address, organization_id")
+      .select(`
+        id, name, address, organization_id,
+        organizations:organization_id(name, type)
+      `)
       .order("name", { ascending: true });
 
     if (error) {
       console.error("Error fetching churches:", error);
     } else {
-      // Fetch organizations separately for display
-      const orgIds = [...new Set((data || []).map(c => c.organization_id).filter(Boolean))];
-      let orgMap = new Map<string, { name: string; type: string }>();
-      if (orgIds.length > 0) {
-        const { data: orgs } = await supabase.from("organizations").select("id, name, type").in("id", orgIds);
-        (orgs ?? []).forEach((o: any) => orgMap.set(o.id, { name: o.name, type: o.type }));
-      }
-      const enriched = (data || []).map(c => ({
-        ...c,
-        organization: c.organization_id ? orgMap.get(c.organization_id) : undefined,
-      }));
-      setChurches(enriched as any);
+      setChurches(data || []);
     }
   };
 
@@ -74,18 +63,16 @@ export const ChurchSwitcher = ({ currentChurchId, onChurchChange, compact = fals
 
     const { data, error } = await supabase
       .from("user_church_context")
-      .select("church_id, is_default")
+      .select(`
+        church_id, is_default,
+        church:churches(id, name, address, organization_id, organizations:organization_id(name, type))
+      `)
       .eq("user_id", user.id);
 
     if (error) {
       console.error("Error fetching user contexts:", error);
     } else {
-      // Enrich with church data
-      const contexts = (data || []).map((ctx: any) => ({
-        ...ctx,
-        church: churches.find(c => c.id === ctx.church_id) || { id: ctx.church_id, name: "Unknown" },
-      }));
-      setUserContexts(contexts as any);
+      setUserContexts(data || []);
     }
   };
 
@@ -95,39 +82,24 @@ export const ChurchSwitcher = ({ currentChurchId, onChurchChange, compact = fals
   }, [user?.id]);
 
   useEffect(() => {
-    if (currentChurch?.id) {
-      setSelectedChurchId(currentChurch.id);
-    } else if (currentChurchId) {
+    if (currentChurchId) {
       setSelectedChurchId(currentChurchId);
     }
-  }, [currentChurchId, currentChurch?.id]);
+  }, [currentChurchId]);
 
   const handleChurchChange = async (churchId: string) => {
     if (!user?.id || !churchId) return;
 
     setLoading(true);
     try {
-      // First clear any existing selected context for this user.
-      const { error: clearError } = await supabase
+      // Update or insert user church context
+      const { error } = await supabase
         .from("user_church_context")
-        .update({ is_default: false })
-        .eq("user_id", user.id);
-
-      if (clearError) {
-        console.error("Error clearing previous church context:", clearError);
-      }
-
-      // Upsert selected church context as default
-      const { error } = await (supabase
-        .from("user_church_context") as any)
-        .upsert(
-          {
-            user_id: user.id,
-            church_id: churchId,
-            is_default: true
-          },
-          { onConflict: "user_id,church_id" }
-        );
+        .upsert({
+          user_id: user.id,
+          church_id: churchId,
+          is_default: false // Could be made configurable later
+        });
 
       if (error) {
         toast({
@@ -136,10 +108,7 @@ export const ChurchSwitcher = ({ currentChurchId, onChurchChange, compact = fals
           variant: "destructive"
         });
       } else {
-        // Force refresh of current church context so other pages update immediately.
-        window.dispatchEvent(new Event("church-context-updated"));
         setSelectedChurchId(churchId);
-        setIsOpen(false); // Close dropdown after selection
         onChurchChange?.(churchId);
 
         const selectedChurch = churches.find(c => c.id === churchId);
@@ -166,7 +135,7 @@ export const ChurchSwitcher = ({ currentChurchId, onChurchChange, compact = fals
     return (
       <div className="flex items-center gap-2">
         <Building2 className="w-4 h-4 text-muted-foreground" />
-        <Select value={selectedChurchId} onValueChange={handleChurchChange} open={isOpen} onOpenChange={setIsOpen} disabled={loading}>
+        <Select value={selectedChurchId} onValueChange={handleChurchChange} disabled={loading}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Select church" />
           </SelectTrigger>
@@ -200,7 +169,7 @@ export const ChurchSwitcher = ({ currentChurchId, onChurchChange, compact = fals
       <CardContent className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <Select value={selectedChurchId} onValueChange={handleChurchChange} open={isOpen} onOpenChange={setIsOpen} disabled={loading}>
+            <Select value={selectedChurchId} onValueChange={handleChurchChange} disabled={loading}>
               <SelectTrigger>
                 <SelectValue placeholder="Select church to manage" />
               </SelectTrigger>

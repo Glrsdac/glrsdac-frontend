@@ -35,13 +35,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
 
 interface Department {
-  id: string;
+  id: number;
   name: string;
 }
 
 interface SharePointDocument {
-  id: string;
-  department_id: string;
+  id: number;
+  department_id: number;
   title: string;
   content: string;
   document_type: string;
@@ -61,7 +61,7 @@ const DepartmentSharePoint = () => {
   const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const [newDoc, setNewDoc] = useState({
     title: "",
@@ -107,11 +107,11 @@ const DepartmentSharePoint = () => {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const { data, error } = await (supabase
-        .from("department_sharepoint" as any)
+      const { data, error } = await supabase
+        .from("department_sharepoint")
         .select("*, departments(name)")
         .eq("department_id", selectedDepartment)
-        .order("created_at", { ascending: false }) as any);
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
@@ -145,8 +145,8 @@ const DepartmentSharePoint = () => {
 
     try {
       if (isEditing && editingId) {
-        const { error } = await (supabase
-          .from("department_sharepoint" as any)
+        const { error } = await supabase
+          .from("department_sharepoint")
           .update({
             title: newDoc.title,
             content: newDoc.content,
@@ -154,7 +154,7 @@ const DepartmentSharePoint = () => {
             visibility: newDoc.visibility,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", editingId) as any);
+          .eq("id", editingId);
 
         if (error) throw error;
         toast({
@@ -162,18 +162,18 @@ const DepartmentSharePoint = () => {
           description: "Document updated successfully",
         });
       } else {
-        const { error } = await (supabase
-          .from("department_sharepoint" as any)
+        const { error } = await supabase
+          .from("department_sharepoint")
           .insert([
             {
               title: newDoc.title,
               content: newDoc.content,
               document_type: newDoc.document_type,
               visibility: newDoc.visibility,
-              department_id: newDoc.department_id,
+              department_id: parseInt(newDoc.department_id),
               created_by: user?.id,
             },
-          ]) as any);
+          ]);
 
         if (error) throw error;
         toast({
@@ -202,14 +202,14 @@ const DepartmentSharePoint = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this document?")) return;
 
     try {
-      const { error } = await (supabase
-        .from("department_sharepoint" as any)
+      const { error } = await supabase
+        .from("department_sharepoint")
         .delete()
-        .eq("id", id) as any);
+        .eq("id", id);
 
       if (error) throw error;
       toast({
@@ -234,12 +234,12 @@ const DepartmentSharePoint = () => {
       visibility: doc.visibility,
       department_id: String(doc.department_id),
     });
-    setEditingId(doc.id as any);
+    setEditingId(doc.id);
     setIsEditing(true);
     setOpenDialog(true);
   };
 
-  const departmentName = departments.find((d) => d.id === selectedDepartment)?.name;
+  const departmentName = departments.find((d) => d.id === parseInt(selectedDepartment))?.name;
 
   return (
     <div className="space-y-6">

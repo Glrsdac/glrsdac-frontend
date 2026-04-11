@@ -5,13 +5,12 @@ interface PageHeaderProps {
   title: string;
   description?: string;
   children?: ReactNode;
-  actions?: ReactNode;
   badge?: ReactNode;
   icon?: ReactNode;
   className?: string;
 }
 
-export function PageHeader({ title, description, children, actions, badge, icon, className }: PageHeaderProps) {
+export function PageHeader({ title, description, children, badge, icon, className }: PageHeaderProps) {
   return (
     <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8", className)}>
       <div className="min-w-0">
@@ -30,9 +29,8 @@ export function PageHeader({ title, description, children, actions, badge, icon,
           </div>
         </div>
       </div>
-      {(children || actions) && (
+      {children && (
         <div className="flex flex-shrink-0 w-full sm:w-auto items-center justify-start sm:justify-end gap-2 flex-wrap">
-          {actions}
           {children}
         </div>
       )}

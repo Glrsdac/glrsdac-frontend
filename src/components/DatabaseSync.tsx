@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { callEdgeFunction } from "@/lib/call-edge-function";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,22 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, CheckCircle2, AlertCircle, Database, Layers, Zap } from "lucide-react";
+import { RefreshCw, CheckCircle2, AlertCircle, Database, Layers } from "lucide-react";
 import { toast } from "sonner";
 
 type SyncDirection = "external_to_cloud" | "cloud_to_external" | "two_way";
-
-interface EdgeFunction {
-  name: string;
-  deployed_at: string | null;
-}
-
-interface DeploymentResponse {
-  success: boolean;
-  functions: EdgeFunction[];
-  message: string;
-  errors?: string[];
-}
 
 interface SyncDetail {
   table: string;
@@ -73,16 +60,18 @@ export const DatabaseSync = () => {
   const [schemaDryRun, setSchemaDryRun] = useState(true);
   const [schemaResult, setSchemaResult] = useState<SchemaResponse | null>(null);
 
-  const [deployingFunctions, setDeployingFunctions] = useState(false);
-  const [deploymentResult, setDeploymentResult] = useState<DeploymentResponse | null>(null);
-
-
   const runSync = async () => {
     setSyncing(true);
     setLastResult(null);
     try {
-      const data = await callEdgeFunction<SyncResponse>("sync-database", { direction, dry_run: dryRun });
-      setLastResult(data);
+      const response = await fetch('/api/functions/sync-database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction, dry_run: dryRun }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Sync failed');
+      setLastResult(data as SyncResponse);
       if (data?.success) {
         toast.success(
           dryRun
@@ -103,8 +92,14 @@ export const DatabaseSync = () => {
     setSyncingSchema(true);
     setSchemaResult(null);
     try {
-      const data = await callEdgeFunction<SchemaResponse>("sync-schema", { dry_run: schemaDryRun });
-      setSchemaResult(data);
+      const response = await fetch('/api/functions/sync-schema', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: schemaDryRun }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Schema sync failed');
+      setSchemaResult(data as SchemaResponse);
       if (data?.success) {
         if (data.no_changes) {
           toast.success("Schemas are in sync — no changes needed");
@@ -122,25 +117,6 @@ export const DatabaseSync = () => {
       toast.error(err.message || "Schema sync failed");
     } finally {
       setSyncingSchema(false);
-    }
-  };
-
-  const deployEdgeFunctions = async () => {
-    setDeployingFunctions(true);
-    setDeploymentResult(null);
-    try {
-      const data = await callEdgeFunction<DeploymentResponse>("list-edge-functions", {});
-      setDeploymentResult(data);
-      if (data?.success) {
-        const count = data.functions?.length || 0;
-        toast.success(`${count} edge function(s) are deployed and ready`);
-      } else {
-        toast.error(data?.message || "Failed to check edge functions");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to check edge functions");
-    } finally {
-      setDeployingFunctions(false);
     }
   };
 
@@ -163,9 +139,6 @@ export const DatabaseSync = () => {
             </TabsTrigger>
             <TabsTrigger value="schema" className="flex items-center gap-1">
               <Layers className="h-3.5 w-3.5" /> Schema
-            </TabsTrigger>
-            <TabsTrigger value="functions" className="flex items-center gap-1">
-              <Zap className="h-3.5 w-3.5" /> Functions
             </TabsTrigger>
           </TabsList>
 
@@ -309,77 +282,6 @@ export const DatabaseSync = () => {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* ── Edge Functions tab ── */}
-          <TabsContent value="functions" className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Check and manage edge function deployments. Edge functions handle authentication, authorization, and secure data operations.
-            </p>
-
-            <Button onClick={deployEdgeFunctions} disabled={deployingFunctions} className="w-full sm:w-auto">
-              <Zap className={`h-4 w-4 mr-2 ${deployingFunctions ? "animate-spin" : ""}`} />
-              {deployingFunctions ? "Checking..." : "Check Functions"}
-            </Button>
-
-            {deploymentResult && (
-              <div className="mt-4 space-y-3">
-                <div className="flex gap-2 flex-wrap">
-                  {deploymentResult.success ? (
-                    <Badge className="bg-green-600">All functions deployed</Badge>
-                  ) : (
-                    <Badge variant="destructive">Deployment check failed</Badge>
-                  )}
-                  <Badge variant="outline">{deploymentResult.functions?.length || 0} functions</Badge>
-                </div>
-
-                {deploymentResult.functions && deploymentResult.functions.length > 0 ? (
-                  <div className="max-h-64 overflow-y-auto border rounded-md">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted sticky top-0">
-                        <tr>
-                          <th className="text-left p-2">Function Name</th>
-                          <th className="text-left p-2">Deployed At</th>
-                          <th className="text-center p-2">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {deploymentResult.functions.map((fn) => (
-                          <tr key={fn.name} className="border-t">
-                            <td className="p-2 font-mono text-xs">{fn.name}</td>
-                            <td className="p-2 text-sm">
-                              {fn.deployed_at ? new Date(fn.deployed_at).toLocaleString() : "—"}
-                            </td>
-                            <td className="p-2 text-center">
-                              {fn.deployed_at ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-500 inline" />
-                              ) : (
-                                <AlertCircle className="h-4 w-4 text-yellow-500 inline" />
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No functions found
-                  </div>
-                )}
-
-                {deploymentResult.errors && deploymentResult.errors.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <div className="text-sm font-medium text-destructive">Errors:</div>
-                    <div className="bg-destructive/10 border border-destructive/20 rounded p-3 text-sm">
-                      {deploymentResult.errors.map((err, i) => (
-                        <div key={i} className="font-mono text-xs text-destructive">{err}</div>
-                      ))}
-                    </div>
                   </div>
                 )}
               </div>

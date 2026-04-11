@@ -71,11 +71,11 @@ const AutomatedReturns = () => {
     try {
       const [year, month] = selectedMonth.split("-");
       
-      const { data, error } = await (supabase
-        .rpc("calculate_monthly_returns" as any, {
+      const { data, error } = await supabase
+        .rpc("calculate_monthly_returns", {
           target_year: parseInt(year),
           target_month: parseInt(month),
-        }) as any);
+        });
 
       if (error) {
         console.error("Error:", error);
@@ -87,7 +87,7 @@ const AutomatedReturns = () => {
         return;
       }
 
-      setReturns((data as any) || []);
+      setReturns(data || []);
     } catch (error) {
       console.error("Error loading returns:", error);
       toast({
