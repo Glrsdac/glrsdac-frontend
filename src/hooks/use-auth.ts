@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Session } from "@supabase/supabase-js";
-import { jwtDecode } from "jwt-decode";
+// Supabase client removed. Uses backend API for authentication state.
+import { supabase } from "@/integrations/supabase/client"; // This line is retained for context
 
 /**
  * useAuth hook
@@ -21,22 +20,6 @@ type JwtPayload = {
   iss?: string;
   ref?: string;
   exp?: number;
-};
-
-/** Determine Supabase project id either from explicit env or from the URL hostname. */
-const getProjectId = () => {
-  const envProjectId = import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined;
-  if (envProjectId) return envProjectId;
-
-  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  if (!url) return "";
-
-  try {
-    const host = new URL(url).hostname;
-    return host.split(".")[0] ?? "";
-  } catch {
-    return "";
-  }
 };
 
 /**
@@ -63,7 +46,7 @@ const isSessionForProject = (session: Session | null) => {
 
 export function useAuth() {
   // Session and initialization status for UI routing.
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -121,10 +104,12 @@ export function useAuth() {
   }, []);
 
   /** Sign out the user. */
+  /** Sign out the user via backend API. */
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await fetch("/api/auth/logout/", { method: "POST", credentials: "include" });
+    setUser(null);
   };
 
   // Expose stable values to consuming components.
-  return { session, loading, signOut, user: session?.user ?? null };
+  return { user, loading, signOut };
 }

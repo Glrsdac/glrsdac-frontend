@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { callBackendFunction } from "@/lib/call-backend-function";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,6 @@ import { Plus, Mail, CheckCircle, Clock, Edit2, Trash2, Users } from "lucide-rea
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
-import { useCurrentChurch } from "@/hooks/use-current-church";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,9 +68,6 @@ type FormState = {
 const normalizeText = (value?: string | null) => (value || "").trim().toLowerCase();
 
 const Members = () => {
-  const { user, session, signOut } = useAuth();
-  const { currentChurch } = useCurrentChurch();
-  const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
   const [positions, setPositions] = useState<PositionDefinition[]>([]);
   const [open, setOpen] = useState(false);
@@ -88,20 +85,14 @@ const Members = () => {
   });
   const [formErrors, setFormErrors] = useState<Partial<FormState>>({});
   const [userRole, setUserRole] = useState<string | null>(null);
+  const { toast } = useToast();
+  const { user, session, signOut } = useAuth();
 
   const fetchMembers = async () => {
-    let query = supabase
+    const { data, error } = await supabase
       .from("members")
       .select("*")
-      // normalize status check to avoid case mismatches (e.g. active vs ACTIVE)
-      .ilike("status", "active")
       .order("created_at", { ascending: false });
-
-    if (currentChurch?.id) {
-      query = query.eq("church_id", currentChurch.id);
-    }
-
-    const { data, error } = await query;
     if (error) {
       console.error("Error fetching members:", error);
       toast({ title: "Error loading members", description: error.message, variant: "destructive" });
@@ -131,7 +122,7 @@ const Members = () => {
       fetchMembers();
       fetchPositions();
     }
-  }, [user, currentChurch?.id]);
+  }, [user]);
 
   useRealtimeRefresh({
     channelName: "members-table-realtime",
@@ -341,23 +332,16 @@ const Members = () => {
       throw new Error("No active session. Please log in again.");
     }
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
     console.log(`[${fnName}] Sending request with token:`, accessToken?.substring(0, 20) + "...");
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fnName}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${anonKey}`,
-          "apikey": anonKey,
-          "x-user-token": accessToken,
-        },
-        body: JSON.stringify(body),
-      }
-    );
+    const response = await fetch(`/api/functions/${fnName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
     const rawText = await response.text();
     let data: any = null;
     try {

@@ -68,8 +68,9 @@ const Expenses = () => {
 
   const fetch = async () => {
     const [exp, imp, fun, dep, ses, deptFunds, activeSes, chq] = await Promise.all([
-      (supabase.from("imprest_expenses") as any)
-        .select("*")
+      supabase
+        .from("imprest_expenses")
+        .select("*, imprest_issues(reference_no), funds(name), sabbath_sessions(date)")
         .order("expense_date", { ascending: false }),
       supabase.from("imprest_issues").select("id, purpose").eq("status", "OPEN"),
       supabase.from("funds").select("id, name"),

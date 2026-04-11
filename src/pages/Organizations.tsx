@@ -39,7 +39,7 @@ import {
 type Organization = {
   id: string;
   name: string;
-  type: string;
+  type: 'conference' | 'union' | 'division' | 'association';
   code: string;
   address?: string;
   phone?: string;
@@ -105,7 +105,10 @@ const Organizations = () => {
   const fetchChurches = async () => {
     const { data, error } = await supabase
       .from("churches")
-      .select("id, name, address, organization_id")
+      .select(`
+        id, name, address, organization_id,
+        organizations:organization_id(name, type)
+      `)
       .order("name", { ascending: true });
 
     if (error) {
@@ -125,7 +128,7 @@ const Organizations = () => {
     const errors: Partial<typeof form> = {};
 
     if (!form.name.trim()) errors.name = "Organization name is required";
-    if (!form.type) (errors as any).type = "Organization type is required";
+    if (!form.type) errors.type = "Organization type is required";
     if (!form.code.trim()) errors.code = "Organization code is required";
 
     // Check for duplicate code
@@ -170,7 +173,7 @@ const Organizations = () => {
     } else {
       const { error } = await supabase
         .from("organizations")
-        .insert(organizationData as any);
+        .insert(organizationData);
 
       if (error) {
         toast({ title: "Error creating organization", description: error.message, variant: "destructive" });

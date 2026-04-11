@@ -1,39 +1,26 @@
-// import { supabase } from "./client";
+import { supabase } from "./client";
 
-const API_BASE = 'http://localhost:8000/api'; // Change to production URL
-
-export const getContributions = async (churchId?: string) => {
-  const url = churchId ? `${API_BASE}/contributions/?church_id=${churchId}` : `${API_BASE}/contributions/`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Failed to fetch contributions');
-  return { data: await response.json(), error: null };
+export const getContributions = async () => {
+  return supabase
+    .from("contributions")
+    .select("*, funds(name), members(first_name, last_name), sabbath_accounts(week_start, week_end, status)")
+    .order("created_at", { ascending: false });
 };
 
-export const getFunds = async (churchId?: string) => {
-  let query = (supabase.from("funds") as any)
+export const getFunds = async () => {
+  return supabase
+    .from("funds")
     .select("id, name, conference_percentage, local_percentage")
     .eq("is_active", true)
     .order("name");
-
-  if (churchId) {
-    query = query.eq("church_id", churchId);
-  }
-
-  return query;
 };
 
-export const getMembers = async (churchId?: string) => {
-  let query = supabase
+export const getMembers = async () => {
+  return supabase
     .from("members")
     .select("id, first_name, last_name")
     .eq("status", "ACTIVE")
     .order("first_name");
-
-  if (churchId) {
-    query = query.eq("church_id", churchId);
-  }
-
-  return query;
 };
 
 export const getSabbathAccounts = async () => {

@@ -761,6 +761,3 @@ export function GovernanceDashboard() {
     </div>
   );
 }
-export default function PortalDashboards() {
-  return <GovernanceDashboard />;
-}

@@ -14,29 +14,19 @@ export function SuperAdminDashboard() {
 
   useEffect(() => {
     async function fetchStats() {
-      const [{ count: churchCount }, { data: adminUsers }, { data: contribs }] = await Promise.all([
+      const [{ count: churchCount }, { count: userCount }, { data: adminUsers }, { data: contribs }, { count: auditCount }] = await Promise.all([
         supabase.from("churches").select("*", { count: "exact", head: true }),
-        supabase.from("user_roles").select("user_id, roles(name)").returns<any[]>(),
+        supabase.from("users").select("*", { count: "exact", head: true }),
+        supabase.from("user_roles").select("user_id, roles(name)").in("roles.name", ["SuperAdmin", "superadmin", "super admin", "system admin", "System Admin"]).returns<any[]>(),
         supabase.from("contributions").select("amount"),
+        supabase.from("audit_logs").select("*", { count: "exact", head: true }),
       ]);
-      const adminRoleNames = new Set(["SuperAdmin", "superadmin", "super admin", "system admin", "System Admin"]);
-      const adminCount = (adminUsers ?? []).filter((u: any) => adminRoleNames.has(u.roles?.name ?? "")).length;
-      const { count: userCount } = await supabase.from("profiles").select("*", { count: "exact", head: true });
-
-      let auditCount = 0;
-      try {
-        const { count } = await supabase.from("audit_logs").select("*", { count: "exact", head: true });
-        auditCount = count || 0;
-      } catch {
-        auditCount = 0;
-      }
-
       setStats({
         churches: churchCount || 0,
         users: userCount || 0,
-        admins: adminCount,
+        admins: (adminUsers ?? []).length,
         totalContributions: (contribs ?? []).reduce((sum, c) => sum + Number(c.amount || 0), 0),
-        auditLogs: auditCount,
+        auditLogs: auditCount || 0,
       });
     }
     fetchStats();

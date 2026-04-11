@@ -1,47 +1,112 @@
-# glrsdac-frontend
+# Welcome to your Lovable project
 
-Next.js frontend for GLRSDAC application, deployed on Vercel.
+## Project info
 
-## Setup
+**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+## How can I edit this code?
 
-2. Run development server:
-   ```bash
-   npm run dev
-   ```
+There are several ways of editing your application.
 
-3. Configure API calls to point to the Django backend on Render.
+**Use Lovable**
 
-## Deployment
+Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
 
-Deploy to Vercel. Ensure CORS is configured in the backend for the Vercel domain.
-# or
-pnpm dev
-# or
-bun dev
+Changes made via Lovable will be committed automatically to this repo.
+
+**Use your preferred IDE**
+
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+
+Follow these steps:
+
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
+
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
+
+# Step 3: Install the necessary dependencies.
+npm i
+
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Edit a file directly in GitHub**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Use GitHub Codespaces**
 
-## Learn More
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-To learn more about Next.js, take a look at the following resources:
+## Database Management
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+This project includes scripts to directly manage your Supabase database without the UI.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Setup
 
-## Deploy on Vercel
+First, add your Supabase service role key to `.env`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key-here"
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Get it from: [Supabase Dashboard](https://app.supabase.com) > Your Project > Settings > API > Service Role Key
+
+### Available Commands
+
+```bash
+# View setup status and requirements
+npm run db:setup
+
+# Query database
+npm run db:query -- list members
+npm run db:query -- count funds
+
+# Populate with sample data
+npm run db:seed
+
+# Apply migrations
+npm run db:migrate
+
+# Export all data to JSON
+npm run db:export
+
+# Clear specific table
+npm run db:clear -- imprest_expenses
+```
+
+For detailed documentation, see [scripts/README.md](./scripts/README.md)
+
+## What technologies are used for this project?
+
+This project is built with:
+
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
+
+## How can I deploy this project?
+
+Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+
+## Can I connect a custom domain to my Lovable project?
+
+Yes, you can!
+
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)

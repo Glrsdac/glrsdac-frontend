@@ -193,7 +193,7 @@ const MyDues = () => {
     try {
       const paymentMonth = format(new Date(paymentForm.payment_date), "yyyy-MM");
       
-      const { error } = await (supabase.from("department_due_payments") as any).insert([
+      const { error } = await supabase.from("department_due_payments").insert([
         {
           department_due_id: selectedDueId,
           payment_amount: parseFloat(paymentForm.amount),

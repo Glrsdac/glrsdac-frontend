@@ -1,6 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { callEdgeFunction } from "@/lib/call-edge-function";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,23 @@ type Assignment = {
 };
 
 const callGlobalAdminFunction = async (token: string, body: Record<string, unknown>) => {
-  return await callEdgeFunction("admin-manage-churches", body, token);
+  const response = await fetch(`/api/functions/admin-manage-churches`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error || "Function request failed");
+  }
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+  return data;
 };
 
 export default function GlobalAdmin() {

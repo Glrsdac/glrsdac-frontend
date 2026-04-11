@@ -197,10 +197,13 @@ const SabbathSessions = () => {
       // Load latest details for validation
       try {
         setIsLoadingDetails(true);
-        const contribRes = await (supabase.from("contributions") as any).select("id").eq("sabbath_account_id", session.id);
-        const expenseRes = await (supabase.from("imprest_expenses") as any).select("id").eq("session_id", session.id);
-        const contribData = contribRes.data;
-        const expenseData = expenseRes.data;
+        const [
+          { data: contribData },
+          { data: expenseData }
+        ] = await Promise.all([
+          supabase.from("contributions").select("id").eq("sabbath_session_id", session.id),
+          supabase.from("imprest_expenses").select("id").eq("session_id", session.id)
+        ]);
 
         const hasContributions = (contribData?.length ?? 0) > 0;
         const hasExpenses = (expenseData?.length ?? 0) > 0;

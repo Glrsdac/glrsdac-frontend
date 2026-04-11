@@ -1,0 +1,1 @@
+-- Migration: Remove redundant full_name column from members table&#10;-- Date: 2026-03-19&#10;&#10;ALTER TABLE public.members&#10;DROP COLUMN IF EXISTS full_name;

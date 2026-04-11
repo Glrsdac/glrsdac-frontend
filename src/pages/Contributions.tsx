@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import React from "react";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
-import { useCurrentChurch } from "@/hooks/use-current-church";
 import { PageHeader } from "@/components/PageHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -21,7 +20,6 @@ const isDaybornFundName = (fundName?: string | null) => {
 
 const Contributions = () => {
   const SUPPORTED_CURRENCIES = ["GHS", "USD", "EUR", "GBP", "NGN"];
-  const { currentChurch } = useCurrentChurch();
   const resolveFundSplitPercentages = (fund?: any) => {
     if (isDaybornFundName(fund?.name)) {
       return {
@@ -83,8 +81,8 @@ const Contributions = () => {
     try {
       const [openAccount, fundsRes, membersRes] = await Promise.all([
         api.getOpenSabbathAccount(),
-        api.getFunds(currentChurch?.id),
-        api.getMembers(currentChurch?.id),
+        api.getFunds(),
+        api.getMembers(),
       ]);
 
       setFunds(fundsRes.data ?? []);
@@ -105,7 +103,7 @@ const Contributions = () => {
     } finally {
       setLoading(false);
     }
-  }, [toast, currentChurch?.id]);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 

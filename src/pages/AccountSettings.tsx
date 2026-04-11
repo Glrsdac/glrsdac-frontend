@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase client removed. All data and auth operations now use backend API.
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,20 +37,21 @@ export default function AccountSettings() {
       e.preventDefault();
       setLoading(true);
       try {
-        // Update full name in members table
+        // Update full name in members table via backend API
         if (memberInfo && memberInfo.id) {
-          const { error } = await supabase
-            .from("members")
-            .update({ full_name: formData.fullName })
-            .eq("id", memberInfo.id);
-          if (error) {
-            toast({ title: "Update failed", description: error.message, variant: "destructive" });
+          const res = await fetch(`/api/members/${memberInfo.id}/`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ full_name: formData.fullName })
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            toast({ title: "Update failed", description: err.detail || "Unknown error", variant: "destructive" });
           } else {
             toast({ title: "Profile updated", description: "Your full name was updated." });
           }
         }
-        // Optionally update user metadata
-        // await supabase.auth.updateUser({ data: { full_name: formData.fullName } });
       } catch (err: any) {
         toast({ title: "Update failed", description: err.message || "Unknown error", variant: "destructive" });
       } finally {
@@ -134,51 +135,41 @@ export default function AccountSettings() {
       // Fetch user roles with join to roles table
       let rolesData = null;
       try {
-        const { data, error } = await supabase
-          .from("user_roles")
-          .select("id, role_id, roles(name)")
-          .eq("user_id", user.id);
-        rolesData = data || [];
-        if (error) {
-          console.warn('Role join failed:', error);
+        // Fetch user roles from backend API
+        const rolesRes = await fetch(`/api/user-roles/?user_id=${user.id}`, { credentials: "include" });
+        let rolesData = [];
+        if (rolesRes.ok) {
+          rolesData = await rolesRes.json();
         }
-      } catch (e) {
-        console.warn('Role join failed:', e);
-      }
-      // Fallback: use role_id only if join fails
-      if (!rolesData || rolesData.length === 0) {
-        rolesData = await supabase
-          .from("user_roles")
-          .select("id, role_id")
-          .eq("user_id", user.id)
-          .then(({ data }) => data || []);
-      }
-      setUserRoles(rolesData.map(r => ({ id: r.id, role: r.roles?.name || r.role_id || 'Unknown' })) as SimpleRole[]);
+        setUserRoles(rolesData.map((r: any) => ({ id: r.id, role: r.role || r.role_id || 'Unknown' })) as SimpleRole[]);
 
-      // Fetch member profile information (fetch all columns)
-      const { data: memberData } = await supabase
-        .from("members")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (memberData) {
+        // Fetch member profile information from backend API
+        const memberRes = await fetch(`/api/members/?user_id=${user.id}`, { credentials: "include" });
+        let memberData = null;
+        if (memberRes.ok) {
+          const arr = await memberRes.json();
+          memberData = arr && arr.length > 0 ? arr[0] : null;
+        }
         setMemberInfo(memberData);
 
-        // Fetch department memberships with error handling
-        try {
-          const { data: deptMembersData } = await supabase
-            .from("department_members")
-            .select("id, department_id, assigned_role, departments(id, name)")
-            .eq("member_id", memberData.id);
-          setUserDepartments((deptMembersData ?? []) as unknown as DepartmentMember[]);
-        } catch (deptError) {
-          console.warn('Department query failed:', deptError);
+        // Fetch department memberships from backend API
+        if (memberData && memberData.id) {
+          const deptRes = await fetch(`/api/department-members/?member_id=${memberData.id}`, { credentials: "include" });
+          if (deptRes.ok) {
+            setUserDepartments(await deptRes.json());
+          } else {
+            setUserDepartments([]);
+          }
+        } else {
           setUserDepartments([]);
         }
-      } else {
+      } catch (error) {
+        setUserRoles([]);
         setMemberInfo(null);
         setUserDepartments([]);
+        console.error("Error fetching user data:", error);
+      } finally {
+        setLoadingUserData(false);
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -189,10 +180,13 @@ export default function AccountSettings() {
 
   const handleForgotPassword = async () => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(user?.email || "", {
-        redirectTo: `${window.location.origin}/auth?type=reset`,
+      const res = await fetch(`/api/auth/forgot-password/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: user?.email, redirectTo: `${window.location.origin}/auth?type=reset` })
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error("Failed to send reset email");
       toast({ title: "Success", description: "Password reset email has been sent to your email address." });
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to send reset email", variant: "destructive" });
@@ -283,11 +277,13 @@ export default function AccountSettings() {
                     phone: memberInfo.phone,
                     dob: memberInfo.dob,
                   };
-                  const { error } = await supabase
-                    .from("members")
-                    .update(updateFields)
-                    .eq("id", memberInfo.id);
-                  if (error) throw error;
+                  const res = await fetch(`/api/members/${memberInfo.id}/`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify(updateFields)
+                  });
+                  if (!res.ok) throw new Error("Failed to update member info");
                   toast({ title: "Success", description: "Member information updated." });
                   fetchUserData();
                 } catch (error: any) {
@@ -422,27 +418,7 @@ export default function AccountSettings() {
               <Button variant="outline" onClick={() => setShowPasswordForm(true)}>Change Password</Button>
             </div>
           ) : (
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const errors: string[] = [];
-              if (!passwordForm.newPassword) errors.push("New password is required");
-              if (passwordForm.newPassword !== passwordForm.confirmPassword) errors.push("Passwords do not match");
-              if (passwordForm.newPassword.length < 8) errors.push("Password must be at least 8 characters");
-              setPasswordErrors(errors);
-              if (errors.length > 0) return;
-              setLoading(true);
-              try {
-                const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
-                if (error) throw error;
-                toast({ title: "Password updated", description: "Your password has been changed successfully." });
-                setShowPasswordForm(false);
-                setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-              } catch (err: any) {
-                toast({ title: "Error", description: err.message || "Failed to update password", variant: "destructive" });
-              } finally {
-                setLoading(false);
-              }
-            }} className="space-y-4">
+            <form onSubmit={handleChangePassword} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="current-password">Current Password</Label>
                 <Input id="current-password" type="password" placeholder="Enter your current password (optional)" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))} />
