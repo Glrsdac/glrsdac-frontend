@@ -5,13 +5,224 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const rawSupabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
 });
+
+interface BackendFilter {
+  field: string;
+  operator: string;
+  value?: any;
+  negate?: boolean;
+}
+
+interface BackendOrder {
+  column: string;
+  ascending?: boolean;
+}
+
+interface BackendQueryOptions {
+  count?: string;
+  head?: boolean;
+}
+
+interface BackendProxyRequest {
+  table: string;
+  action: 'select' | 'insert' | 'update' | 'delete';
+  select?: string;
+  filters?: BackendFilter[];
+  order?: BackendOrder[];
+  limit?: number;
+  data?: any;
+  options?: BackendQueryOptions;
+  single?: boolean;
+  maybeSingle?: boolean;
+}
+
+class BackendTableQuery {
+  private method: 'select' | 'insert' | 'update' | 'delete' = 'select';
+  private selectClause?: string;
+  private payload?: any;
+  private filters: BackendFilter[] = [];
+  private orderByClauses: BackendOrder[] = [];
+  private limitValue?: number;
+  private options?: BackendQueryOptions;
+  private singleRow = false;
+  private maybeSingleRow = false;
+
+  constructor(private readonly table: string) {}
+
+  select(selectClause: string, options?: BackendQueryOptions) {
+    this.method = 'select';
+    this.selectClause = selectClause;
+    this.options = options;
+    return this;
+  }
+
+  insert(data: any) {
+    this.method = 'insert';
+    this.payload = data;
+    return this;
+  }
+
+  update(data: any) {
+    this.method = 'update';
+    this.payload = data;
+    return this;
+  }
+
+  delete() {
+    this.method = 'delete';
+    return this;
+  }
+
+  eq(field: string, value: any) {
+    this.filters.push({ field, operator: 'eq', value });
+    return this;
+  }
+
+  gt(field: string, value: any) {
+    this.filters.push({ field, operator: 'gt', value });
+    return this;
+  }
+
+  gte(field: string, value: any) {
+    this.filters.push({ field, operator: 'gte', value });
+    return this;
+  }
+
+  lt(field: string, value: any) {
+    this.filters.push({ field, operator: 'lt', value });
+    return this;
+  }
+
+  lte(field: string, value: any) {
+    this.filters.push({ field, operator: 'lte', value });
+    return this;
+  }
+
+  not(field: string, operator: string, value: any) {
+    this.filters.push({ field, operator, value, negate: true });
+    return this;
+  }
+
+  in(field: string, values: any[]) {
+    this.filters.push({ field, operator: 'in', value: values });
+    return this;
+  }
+
+  match(values: Record<string, any>) {
+    Object.entries(values).forEach(([field, value]) => {
+      this.filters.push({ field, operator: 'eq', value });
+    });
+    return this;
+  }
+
+  like(field: string, value: any) {
+    this.filters.push({ field, operator: 'like', value });
+    return this;
+  }
+
+  ilike(field: string, value: any) {
+    this.filters.push({ field, operator: 'ilike', value });
+    return this;
+  }
+
+  contains(field: string, value: any) {
+    this.filters.push({ field, operator: 'cs', value });
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }) {
+    this.orderByClauses.push({ column, ascending: options?.ascending });
+    return this;
+  }
+
+  limit(limit: number) {
+    this.limitValue = limit;
+    return this;
+  }
+
+  single() {
+    this.singleRow = true;
+    return this;
+  }
+
+  maybeSingle() {
+    this.maybeSingleRow = true;
+    return this;
+  }
+
+  returns<T>() {
+    return this;
+  }
+
+  catch(onRejected: (reason: any) => any) {
+    return this.execute().catch(onRejected);
+  }
+
+  then<TResult1 = any, TResult2 = never>(
+    onfulfilled?: ((value: any) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
+  ) {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+
+  private async execute() {
+    const query: BackendProxyRequest = {
+      table: this.table,
+      action: this.method,
+      select: this.selectClause,
+      filters: this.filters,
+      order: this.orderByClauses,
+      limit: this.limitValue,
+      data: this.payload,
+      options: this.options,
+      single: this.singleRow,
+      maybeSingle: this.maybeSingleRow,
+    };
+
+    try {
+      const response = await fetch('/api/supabase-proxy/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(query),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        return { data: null, error: { message: `Backend proxy failed: ${response.status} ${text}` } };
+      }
+
+      const json = await response.json();
+      let data = json.data;
+      if (this.singleRow || this.maybeSingleRow) {
+        if (Array.isArray(data)) {
+          data = data.length > 0 ? data[0] : null;
+        }
+      }
+
+      return {
+        data,
+        error: json.error ?? null,
+        count: json.count,
+      };
+    } catch (error) {
+      return { data: null, error: { message: String(error) } };
+    }
+  }
+}
+
+export const supabase = {
+  from: (table: string) => new BackendTableQuery(table),
+  auth: rawSupabase.auth,
+  storage: rawSupabase.storage,
+  functions: rawSupabase.functions,
+};
